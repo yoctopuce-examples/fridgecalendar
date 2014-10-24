@@ -1,13 +1,4 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: seb
- * Date: 22.10.2014
- * Time: 16:45
- */
-
-
-
 require_once('yoctolib/yocto_api.php');
 require_once('yoctolib/yocto_display.php');
 require_once('common.php');
@@ -23,13 +14,18 @@ function getEventsFromSerial($serial)
     }
 
     $client = setup_google_client();
-    $client->setAccessToken($access_token['access_token']);
-    if ($client->isAccessTokenExpired()) {
-        $client->refreshToken($access_token['refresh_token']);
-    }
+    try {
+        $client->setAccessToken($access_token['access_token']);
+        if ($client->isAccessTokenExpired()) {
+                $client->refreshToken($access_token['refresh_token']);
+        }
 
-    $res = getUpcommingEvents($client,7);
-    updateToken($mysqli,$client, $serial);
+        $res = getUpcommingEvents($client,7);
+        updateToken($mysqli,$client, $serial);
+    } catch (Google_Auth_Exception $ex){
+        // the user has revoked our token
+        return FALSE;
+    }
     return $res;
 }
 
@@ -70,7 +66,7 @@ function OutputMaxiDisplay($display, $events)
     $layer0->selectGrayPen(0);
     $layer0->drawBar(0,0,$w-1,$h-1);
     $layer0->selectGrayPen(255);
-    $nblines = 8;
+    $nblines = 5;
     $line_height = $h / $nblines;
     $ev_pos = 0;
 
@@ -88,7 +84,8 @@ function OutputMaxiDisplay($display, $events)
             if ($day==$today)
                 $day="TODAY: ".$day;
             print("line $i: $day\n");
-            $layer0->drawText(0, $y, YDisplayLayer::ALIGN_TOP_LEFT, $day);
+            $layer0->drawBar(0,$y+8,$w-1,$y+8);
+            $layer0->drawText(2, $y, YDisplayLayer::ALIGN_TOP_LEFT, $day);
         } else{
             print("line $i: {$events[$ev_pos]['what']}\n");
             $layer0->drawText(10, $y, YDisplayLayer::ALIGN_TOP_LEFT, $events[$ev_pos]['what']);

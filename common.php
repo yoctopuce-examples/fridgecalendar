@@ -64,7 +64,6 @@ function updateToken($mysqli, $client, $serial)
  */
 function getToken($mysqli, $serial)
 {
-    $res = FALSE;
     $query = "SELECT * FROM serial2token WHERE serial='$serial';";
     $result = $mysqli->query($query);
     if ($result && $result->num_rows > 0) {
@@ -74,10 +73,15 @@ function getToken($mysqli, $serial)
         $res['access_token'] = $obj->access_token;
         $res['refresh_token'] = $obj->refresh_token;
         $result->close();
+        // check if it is a valid token
+        if ($res['refresh_token']=='' || $res['access_token']==''){
+            return FALSE;
+        }
+        return $res;
     } else {
-        echo "<b>no result</b><br/>";
+        return FALSE;
     }
-    return $res;
+
 }
 
 
@@ -94,13 +98,10 @@ function setup_google_client()
     $client->setClientSecret('XXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
     $client->setRedirectUri('XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
     $client->addScope("https://www.googleapis.com/auth/calendar");
-
-
-    $client->setApprovalPrompt('force');
     return $client;
 }
 
-
+define('CALENDAR_TIMEZONE', "Europe/Zurich");
 
 /**
  * @param $client
@@ -112,16 +113,22 @@ function getUpcommingEvents($client,$nb_days=1)
     $res = array();
     $service = new Google_Service_Calendar($client);
     $calendarList = $service->calendarList->listCalendarList();
-    $now = time();
+    $dt_tz = new DateTimeZone (CALENDAR_TIMEZONE);
+    $dt_list_start = new DateTime('now', $dt_tz);
+    $dt_list_stop = new DateTime('now', $dt_tz);
+    $dt_list_stop->add(new DateInterval('P'.$nb_days.'D'));
+
     while (true) {
         /** @var Google_Service_Calendar_Calendar $calendarListEntry */
         foreach ($calendarList->getItems() as $calendarListEntry) {
             $calendar_id = $calendarListEntry->getId();
             $optParam = array("orderBy" => "startTime",
-                "singleEvents" => true,
-                "timeMin" => date(DateTime::ATOM, $now),
-                "timeMax" => date(DateTime::ATOM, $now + ($nb_days * 24 * 60 * 60)));
-            // get event that occure in the next 7 days
+                'singleEvents' => true,
+                'timeMin' => $dt_list_start->format(DateTime::ATOM),
+                'timeMax' => $dt_list_stop->format(DateTime::ATOM),
+                'timeZone' => CALENDAR_TIMEZONE
+            );
+            // get event that occur in the next 7 days
             $events = $service->events->listEvents($calendar_id, $optParam);
             /** @var Google_Service_Calendar_Event $event */
             foreach ($events->getItems() as $event) {
@@ -130,20 +137,22 @@ function getUpcommingEvents($client,$nb_days=1)
                 /** @var Google_Service_Calendar_EventDateTime $start */
                 $start = $event->getStart();
                 if($start->getDate() != "") {
-                    // handle multiples day events
-                    $dt_start = strtotime($start->getDate());
+                    // handle full day events
                     /** @var Google_Service_Calendar_EventDateTime $end */
                     $end = $event->getEnd();
-                    $dt_end = strtotime($end->getDate());
-                    $start_of_today = $now - ($now % (24*60*60));
-                    while($start_of_today <= $dt_end) {
-                        $res[] = array('when'=> $start_of_today, 'what'=>$description);
-                        $start_of_today += (24*60*60);
+                    $dt_end = new DateTime($end->getDate());
+                    $start_of_today = new DateTime();
+                    while($start_of_today < $dt_end) {
+                        $res[] = array('when'=> $start_of_today->getTimestamp(), 'what'=>$description);
+                        $start_of_today->add(new DateInterval('P1D'));
                     }
                 } else {
-                    $dt = strtotime($start->getDateTime());
-                    $description .= date(" (h:i)", $dt);
-                    $res[] = array('when'=> $dt, 'dbg'=>$event->getStart()->getDate(), 'what'=>$description);
+                    $tz = $start->getTimeZone();
+                    $date_time = new DateTime($start->getDateTime());
+                    if ($tz != '')
+                        $date_time->setTimezone( new DateTimeZone($tz));
+                    $description .= $date_time->format(" (h:i)");
+                    $res[] = array('when'=> $date_time->getTimestamp(), 'dbg'=>$event->getStart()->getDate(), 'what'=>$description);
                 }
             }
         }

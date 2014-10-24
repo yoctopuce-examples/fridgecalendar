@@ -1,9 +1,3 @@
-<html>
-<head>
-</head>
-<body>
-<pre>
-
 <?php
 /**
  * Created by PhpStorm.
@@ -15,16 +9,13 @@
 
  */
 require_once('common.php');
+
+/**
+ *  Setup Google client object with our keys
+ *
+ */
 $client = setup_google_client();
 $mysqli = setupDbConnection();
-
-/************************************************
-Make an API request on behalf of a user. In
-this case we need to have a valid OAuth 2.0
-token for the user, so we need to send them
-through a login flow. To do this we need some
-information from our API console project.
- ************************************************/
 
 
 
@@ -32,42 +23,52 @@ information from our API console project.
 If we're logging out we just need to clear our
 local access token in this case
  ************************************************/
-if (isset($_REQUEST['logout'])) {
-    clearToken($mysqli, $serial, "", "");
-    unset($_SESSION['access_token']);
-    DIE("LOGOUT");
-}
 
-/************************************************
-If we have a code back from the OAuth 2.0 flow,
-we need to exchange that with the authenticate()
-function. We store the resultant access token
-bundle in the session, and redirect to ourself.
- ************************************************/
+/**
+ * After the user have authorise our web app google forward the tuser
+ * back on this script and pass the "authentification code".
+ * This authentification code is valid only once, so we have to exchange it
+ * for a long term "access token" with the authenticate function. And save it
+ * into the database for the following executions of this script
+ */
 if (isset($_GET['code'])) {
     $client->authenticate($_GET['code']);
     updateToken($mysqli, $client, $serial);
     $redirect = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['PHP_SELF'];
-    print('Location: ' . filter_var($redirect, FILTER_SANITIZE_URL));
-    die();
+    header('Location: ' . filter_var($redirect, FILTER_SANITIZE_URL));
 }
 
 
 $access_token = getToken($mysqli, $serial);
 
 
+
 /************************************************
 If we have an access token, we can make
 requests, else we generate an authentication URL.
  ************************************************/
-if($access_token['access_token']) {
+if($access_token && isset($access_token['access_token'])) {
     $client->setAccessToken($access_token['access_token']);
-    if ($client->isAccessTokenExpired()) {
-        $client->refreshToken($access_token['refresh_token']);
+    if (isset($_REQUEST['logout'])) {
+        $client->revokeToken();
+        clearToken($mysqli, $serial, "", "");
+        $redirect = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['PHP_SELF'];
+        header('Location: ' . filter_var($redirect, FILTER_SANITIZE_URL));
+    }
+
+    try {
+        if ($client->isAccessTokenExpired()) {
+            $client->refreshToken($access_token['refresh_token']);
+        }
+        $events = getUpcommingEvents($client, 7);
+    } catch (Exception $ex){
+        $client->revokeToken();
+        clearToken($mysqli, $serial, "", "");
+        $redirect = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['PHP_SELF'];
+        header('Location: ' . filter_var($redirect, FILTER_SANITIZE_URL));
     }
 } else {
     $authUrl = $client->createAuthUrl();
-    print("<a href=\"$authUrl\"> log you in</a><br/>");
 }
 
 
@@ -78,19 +79,34 @@ changed during the request - the main thing that
 might happen here is the access token itself is
 refreshed if the application has offline access.
  ************************************************/
-$events_to_show = array();
 
 if ($client->getAccessToken()) {
     // get all calendar events
 
-    $events = getUpcommingEvents($client, 7);
-    print_r($events);
     //Save the refresh token on our database.
     updateToken($mysqli, $client, $serial);
 }
 
 ?>
+<html>
+<head>
+</head>
+<body>
+<h1>Fridge Calendar Config page</h1>
 
-</pre>
+<?php if (isset($authUrl)): ?>
+    <a href='<?php echo $authUrl; ?>'>log you in!</a>
+<?php else: ?>
+    <a class='logout' href='?logout'>Logout</a>
+    <ul>
+        <?php
+            foreach($events as $event) {
+                print("<li>{$event['what']}</li>");
+            }
+        ?>
+    </ul>
+
+<?php endif ?>
+
 </body>
 </html>
