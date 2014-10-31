@@ -1,13 +1,4 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: seb
- * Date: 21.10.2014
- * Time: 15:42
-
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-
- */
 require_once('common.php');
 
 /**
@@ -33,13 +24,13 @@ local access token in this case
  */
 if (isset($_GET['code'])) {
     $client->authenticate($_GET['code']);
-    updateToken($mysqli, $client, $serial);
+    updateToken($mysqli, $client, YOCTO_DISPLAY_SERIAL);
     $redirect = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['PHP_SELF'];
     header('Location: ' . filter_var($redirect, FILTER_SANITIZE_URL));
 }
 
 
-$access_token = getToken($mysqli, $serial);
+$access_token = getToken($mysqli, YOCTO_DISPLAY_SERIAL);
 
 
 
@@ -51,7 +42,7 @@ if($access_token && isset($access_token['access_token'])) {
     $client->setAccessToken($access_token['access_token']);
     if (isset($_REQUEST['logout'])) {
         $client->revokeToken();
-        clearToken($mysqli, $serial, "", "");
+        clearToken($mysqli, YOCTO_DISPLAY_SERIAL, "", "");
         $redirect = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['PHP_SELF'];
         header('Location: ' . filter_var($redirect, FILTER_SANITIZE_URL));
     }
@@ -63,7 +54,7 @@ if($access_token && isset($access_token['access_token'])) {
         $events = getUpcommingEvents($client, 7);
     } catch (Exception $ex){
         $client->revokeToken();
-        clearToken($mysqli, $serial, "", "");
+        clearToken($mysqli, YOCTO_DISPLAY_SERIAL, "", "");
         $redirect = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['PHP_SELF'];
         header('Location: ' . filter_var($redirect, FILTER_SANITIZE_URL));
     }
@@ -84,7 +75,7 @@ if ($client->getAccessToken()) {
     // get all calendar events
 
     //Save the refresh token on our database.
-    updateToken($mysqli, $client, $serial);
+    updateToken($mysqli, $client, YOCTO_DISPLAY_SERIAL);
 }
 
 ?>

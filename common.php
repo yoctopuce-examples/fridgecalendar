@@ -1,25 +1,40 @@
 <?php
 /**
- * Created by PhpStorm.
- * User: seb
- * Date: 22.10.2014
- * Time: 16:44
+ *  includes Google PHP library
  */
-
-require_once('google-api-php-client/autoload.php');
-
-
-$serial ="YD128X64-0E763";
+require_once('google-api-php-client/src/Google/Client.php');
+require_once('google-api-php-client/src/Google/Service/Calendar.php');
 
 
 /**
+ *  CONSTANTS TO BE PATCHED WITH USER DATA
+ */
+define('YOCTO_DISPLAY_SERIAL',"YD128X64-XXXXXX");
+define('DB_NAME', 'XXXXXXXXXX');
+define('DB_USER', 'XXXXXXXXX');
+define('DB_PASS', 'XXXXXXXXX');
+define('GOOGLE_CLIENT_ID', 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
+define('GOOGLE_CLIENT_SECRET', 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
+define('GOOGLE_REDIRECT_URI', 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
+define('CALENDAR_TIMEZONE', "Europe/Zurich");
+
+
+/**
+ *  setup db connection
  * @return mysqli
  */
 function setupDbConnection()
 {
-    $mysqli = new mysqli("localhost", "yfridgecalendar", "XXXXXXXX", "XXXXXXXXX");
+    $mysqli = new mysqli("localhost", DB_USER, DB_PASS, DB_NAME);
     if($mysqli->connect_errno) {
         echo "Echec lors de la connexion à MySQL : (" . $mysqli->connect_errno . ") " . $mysqli->connect_error;
+    }
+    // if table serial2token does not exit create it
+    $query = 'CREATE TABLE IF NOT EXISTS `serial2token` (`serial` varchar(20) NOT NULL,'
+        .' `access_token` varchar(512) NOT NULL, `refresh_token` varchar(512) NOT NULL,'.
+        '  PRIMARY KEY (`serial`), UNIQUE KEY `serial` (`serial`)) ENGINE=MyISAM DEFAULT CHARSET=utf8;';
+    if (!$mysqli->query($query)) {
+        echo "unable to create table : (" . $mysqli->errno . ") " . $mysqli->error;
     }
     return $mysqli;
 }
@@ -90,28 +105,26 @@ function getToken($mysqli, $serial)
  */
 function setup_google_client()
 {
-
     $client = new Google_Client();
     $client->setApplicationName("Fridge Calendar");
     $client->setAccessType('offline');
-    $client->setClientId('XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
-    $client->setClientSecret('XXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
-    $client->setRedirectUri('XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
-    $client->addScope("https://www.googleapis.com/auth/calendar");
+    $client->setClientId(GOOGLE_CLIENT_ID);
+    $client->setClientSecret(GOOGLE_CLIENT_SECRET);
+    $client->setRedirectUri(GOOGLE_REDIRECT_URI);
+    $client->addScope("https://www.googleapis.com/auth/calendar.readonly");
     return $client;
 }
 
-define('CALENDAR_TIMEZONE', "Europe/Zurich");
 
 /**
- * @param $client
+ * @param $google_client
  * @param int $nb_days
  * @return array
  */
-function getUpcommingEvents($client,$nb_days=1)
+function getUpcommingEvents($google_client,$nb_days=1)
 {
     $res = array();
-    $service = new Google_Service_Calendar($client);
+    $service = new Google_Service_Calendar($google_client);
     $calendarList = $service->calendarList->listCalendarList();
     $dt_tz = new DateTimeZone (CALENDAR_TIMEZONE);
     $dt_list_start = new DateTime('now', $dt_tz);
@@ -152,7 +165,7 @@ function getUpcommingEvents($client,$nb_days=1)
                     if ($tz != '')
                         $date_time->setTimezone( new DateTimeZone($tz));
                     $description .= $date_time->format(" (h:i)");
-                    $res[] = array('when'=> $date_time->getTimestamp(), 'dbg'=>$event->getStart()->getDate(), 'what'=>$description);
+                    $res[] = array('when'=> $date_time->getTimestamp(), 'what'=>$description);
                 }
             }
         }
