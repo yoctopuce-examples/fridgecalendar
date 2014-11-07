@@ -70,11 +70,11 @@ function OutputMaxiDisplay($display, $events)
     $line_height = $h / $nblines;
     $ev_pos = 0;
 
-    $today = date('D j M:', $events[0]['when']);
+    $today = strftime ('%A %e %b:');
     $last_day="";
     for($i =0; $i< $nblines; $i++) {
         $y =$line_height * $i;
-        $day = date('D j M:', $events[$ev_pos]['when']);
+        $day = strftime ('%A %e %b:', $events[$ev_pos]['when']);
         if ($last_day!=$day) {
             if ($i==$nblines-1){
                 // do not display day header if it's the last line

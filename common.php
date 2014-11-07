@@ -30,7 +30,7 @@ function setupDbConnection()
         echo "Echec lors de la connexion à MySQL : (" . $mysqli->connect_errno . ") " . $mysqli->connect_error;
     }
     // if table serial2token does not exit create it
-    $query = 'CREATE TABLE IF NOT EXISTS `serial2token` (`serial` varchar(20) NOT NULL,'
+    $query = "CREATE TABLE IF NOT EXISTS `serial2token` (`serial` varchar(20) NOT NULL,"
         .' `access_token` varchar(512) NOT NULL, `refresh_token` varchar(512) NOT NULL,'.
         '  PRIMARY KEY (`serial`), UNIQUE KEY `serial` (`serial`)) ENGINE=MyISAM DEFAULT CHARSET=utf8;';
     if (!$mysqli->query($query)) {
@@ -112,6 +112,8 @@ function setup_google_client()
     $client->setClientSecret(GOOGLE_CLIENT_SECRET);
     $client->setRedirectUri(GOOGLE_REDIRECT_URI);
     $client->addScope("https://www.googleapis.com/auth/calendar.readonly");
+    $client->setApprovalPrompt('force');
+
     return $client;
 }
 
@@ -147,6 +149,9 @@ function getUpcommingEvents($google_client,$nb_days=1)
             foreach ($events->getItems() as $event) {
                 $summary = $event->getSummary();
                 $description = utf8_decode($summary);
+                if ($description==''){
+                    $description = '(Sans Titre)';
+                }
                 /** @var Google_Service_Calendar_EventDateTime $start */
                 $start = $event->getStart();
                 if($start->getDate() != "") {
@@ -154,17 +159,22 @@ function getUpcommingEvents($google_client,$nb_days=1)
                     /** @var Google_Service_Calendar_EventDateTime $end */
                     $end = $event->getEnd();
                     $dt_end = new DateTime($end->getDate());
-                    $start_of_today = new DateTime();
-                    while($start_of_today < $dt_end) {
-                        $res[] = array('when'=> $start_of_today->getTimestamp(), 'what'=>$description);
-                        $start_of_today->add(new DateInterval('P1D'));
+                    $dt_start = new DateTime($start->getDate());
+                    $dt_today = new DateTime();
+                    if ($dt_start < $dt_today){
+                        $dt_start = $dt_today;
+                    }
+
+                    while($dt_start < $dt_end) {
+                        $res[] = array('when'=> $dt_start->getTimestamp(), 'what'=>$description);
+                        $dt_start->add(new DateInterval('P1D'));
                     }
                 } else {
                     $tz = $start->getTimeZone();
                     $date_time = new DateTime($start->getDateTime());
                     if ($tz != '')
                         $date_time->setTimezone( new DateTimeZone($tz));
-                    $description .= $date_time->format(" (h:i)");
+                    $description .= $date_time->format(" (H:i)");
                     $res[] = array('when'=> $date_time->getTimestamp(), 'what'=>$description);
                 }
             }
