@@ -34,26 +34,32 @@ function error2YDisplay($display, $error)
  */
 function OutputMaxiDisplay($display, $allevents)
 {
-    $type = $display->get_displayType();
-
-    // clear all layer on top of layer 0 an 1
-    $layer_count = $display->get_layerCount();
-    for ($i = 2; $i < $layer_count; $i++) {
-        /** @var YDisplayLayer $layer */
-        $layer = $display->get_displayLayer($i);
-        $layer->clear();
-    }
-
+    $display->postponeRefresh(500);
+    $display->resetAll();
     /** @var YDisplayLayer $layer0 */
     $layer0 = $display->get_displayLayer(0);
-    $layer0->hide();
-    $layer0->clear();
     $h = $display->get_displayHeight();
     $w = $display->get_displayWidth();
-    $layer0->selectGrayPen(0);
-    $layer0->drawBar(0, 0, $w - 1, $h - 1);
-    $layer0->selectGrayPen(255);
-    $nblines = 5;
+
+    $type = $display->get_displayType();
+    $display->set_autoInvertDelay(00);
+    if ($type == YDisplay::DISPLAYTYPE_MONO) {
+        //$display->set_autoInvertDelay(3600);
+        $layer0->selectFont("Small.yfm");
+        $layer0->selectGrayPen(255);
+    } else {
+        $layer0->selectGrayPen(0);
+    }
+
+    if ($h > 64) {
+        $layer0->selectFont("Medium.yfm");
+        $baseline_height = 16;
+        $nblines = 8;
+    } else {
+        $layer0->selectFont("Small.yfm");
+        $baseline_height = 8;
+        $nblines = 5;
+    }
     $curline = 0;
     $line_height = intdiv($h, $nblines);
     $today = date('l j M');
@@ -68,7 +74,7 @@ function OutputMaxiDisplay($display, $allevents)
                 $header = $day;
             }
             $y = $line_height * $curline;
-            $layer0->drawBar(0, $y + 8, $w - 1, $y + 8);
+            $layer0->drawBar(0, $y + $baseline_height, $w - 1, $y + $baseline_height);
             $layer0->drawText(2, $y, YDisplayLayer::ALIGN_TOP_LEFT, $header);
             $curline++;
             $last_day = $day;
@@ -85,10 +91,7 @@ function OutputMaxiDisplay($display, $allevents)
             $layer0->drawPixel(14, $h - 1);
         }
     }
-    $display->swapLayerContent(0, 1);
-    $layer1 = $display->get_displayLayer(1);
-    $layer1->unhide();
-
+    $display->triggerRefresh();
 }
 
 $now = time();

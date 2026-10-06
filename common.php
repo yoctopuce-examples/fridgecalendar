@@ -9,9 +9,9 @@ setlocale(LC_TIME, 'fr_FR.utf8', 'fra');
 
 const DATA_DIR = __DIR__ . '/data';
 const CALENDARS_FILE = DATA_DIR . '/calendars.json';
-const DISPLAY_LOCALE = 'fr_FR';        // locale pour les noms de jours sur l'écran
+const DISPLAY_LOCALE = 'fr_FR';
 const DEFAULT_TZ = 'Europe/Zurich';
-const FETCH_DAYS = 7;               // horizon des événements affichés
+const FETCH_DAYS = 14;
 
 
 date_default_timezone_set(DEFAULT_TZ);
@@ -76,7 +76,7 @@ class Event
         if ($this->_fullday) {
             return $this->_description;
         }else {
-            return $this->_description . $this->_start->format(" (H:i)");
+            return $this->_start->format("H:i "). $this->_description;
         }
     }
 
