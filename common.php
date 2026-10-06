@@ -1,197 +1,190 @@
 <?php
-/**
- *  includes Google PHP library
- */
-require_once('google-api-php-client/src/Google/Client.php');
-require_once('google-api-php-client/src/Google/Service/Calendar.php');
-
-
+declare(strict_types=1);
 /**
  *  CONSTANTS TO BE PATCHED WITH USER DATA
  */
-define('YOCTO_DISPLAY_SERIAL',"YD128X64-XXXXXX");
-define('DB_NAME', 'XXXXXXXXXX');
-define('DB_USER', 'XXXXXXXXX');
-define('DB_PASS', 'XXXXXXXXX');
-define('GOOGLE_CLIENT_ID', 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
-define('GOOGLE_CLIENT_SECRET', 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
-define('GOOGLE_REDIRECT_URI', 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
 define('CALENDAR_TIMEZONE', "Europe/Zurich");
+define('TODAY_STR', 'Aujourd\'hui');
+setlocale(LC_TIME, 'fr_FR.utf8', 'fra');
+
+const DATA_DIR = __DIR__ . '/data';
+const CALENDARS_FILE = DATA_DIR . '/calendars.json';
+const DISPLAY_LOCALE = 'fr_FR';        // locale pour les noms de jours sur l'écran
+const DEFAULT_TZ = 'Europe/Zurich';
+const FETCH_DAYS = 7;               // horizon des événements affichés
 
 
-/**
- *  setup db connection
- * @return mysqli
- */
-function setupDbConnection()
+date_default_timezone_set(DEFAULT_TZ);
+// --- Stockage JSON : une URL iCal par numéro de série d'écran ---------------
+
+/** @return array<string, string> tableau serial => url iCal */
+function loadCalendarStore(): array
 {
-    $mysqli = new mysqli("localhost", DB_USER, DB_PASS, DB_NAME);
-    if($mysqli->connect_errno) {
-        echo "Echec lors de la connexion � MySQL : (" . $mysqli->connect_errno . ") " . $mysqli->connect_error;
+    if (!is_file(CALENDARS_FILE)) {
+        return [];
     }
-    // if table serial2token does not exit create it
-    $query = "CREATE TABLE IF NOT EXISTS `serial2token` (`serial` varchar(20) NOT NULL,"
-        .' `access_token` varchar(512) NOT NULL, `refresh_token` varchar(512) NOT NULL,'.
-        '  PRIMARY KEY (`serial`), UNIQUE KEY `serial` (`serial`)) ENGINE=MyISAM DEFAULT CHARSET=utf8;';
-    if (!$mysqli->query($query)) {
-        echo "unable to create table : (" . $mysqli->errno . ") " . $mysqli->error;
-    }
-    return $mysqli;
+    $raw = file_get_contents(CALENDARS_FILE);
+    $store = json_decode((string)$raw, true);
+    return is_array($store) ? $store : [];
 }
 
-/**
- * @param $mysqli mysqli
- * @param $serial
- * @param $access_token
- * @param $refreshToken
- */
-function clearToken($mysqli, $serial, $access_token, $refreshToken)
+function saveCalendarStore(array $store): void
 {
-    $query = "INSERT INTO serial2token (serial,access_token, refresh_token) VALUES ('$serial','$access_token', '$refreshToken') ON DUPLICATE KEY UPDATE" .
-        " serial = VALUES(serial), access_token = VALUES(access_token), refresh_token = VALUES(refresh_token);";
-    if (!$mysqli->query($query)) {
-        echo "unable to insert token : (" . $mysqli->errno . ") " . $mysqli->error;
+    if (!is_dir(DATA_DIR)) {
+        mkdir(DATA_DIR, 0770, true);
     }
+    file_put_contents(CALENDARS_FILE, json_encode($store, JSON_PRETTY_PRINT), LOCK_EX);
 }
 
-/**
- * @param $mysqli mysqli
- * @param $client Google_Client
- * @param $serial string
- */
-function updateToken($mysqli, $client, $serial)
+function getCalendarUrl(string $serial): ?string
 {
-    $access_token = $client->getAccessToken();
-    $tokens_decoded = json_decode($access_token);
-    $refreshToken = $tokens_decoded->refresh_token;
-
-    $query = "INSERT INTO serial2token (serial,access_token, refresh_token) VALUES ('$serial','$access_token', '$refreshToken') ON DUPLICATE KEY UPDATE" .
-        " serial = VALUES(serial), access_token = VALUES(access_token), refresh_token = VALUES(refresh_token);";
-    if(!$mysqli->query($query)) {
-        echo "unable to insert token : (" . $mysqli->errno . ") " . $mysqli->error;
-    }
+    $url = loadCalendarStore()[$serial] ?? null;
+    return is_string($url) ? $url : null;
 }
 
-/**
- * @param $mysqli mysqli
- * @param $serial
- * @return array
- */
-function getToken($mysqli, $serial)
+function setCalendarUrl(string $serial, string $url): void
 {
-    $query = "SELECT * FROM serial2token WHERE serial='$serial';";
-    $result = $mysqli->query($query);
-    if ($result && $result->num_rows > 0) {
-        $obj = $result->fetch_object();
-        $res = array();
-        $res['serial'] = $obj->serial;
-        $res['access_token'] = $obj->access_token;
-        $res['refresh_token'] = $obj->refresh_token;
-        $result->close();
-        // check if it is a valid token
-        if ($res['refresh_token']=='' || $res['access_token']==''){
-            return FALSE;
+    $store = loadCalendarStore();
+    $store[$serial] = $url;
+    saveCalendarStore($store);
+}
+
+function removeCalendar(string $serial): void
+{
+    $store = loadCalendarStore();
+    unset($store[$serial]);
+    saveCalendarStore($store);
+}
+
+class Event
+{
+    private DateTimeImmutable $_start;
+    private DateTimeImmutable $_stop;
+    private string $_description;
+    private bool $_fullday;
+
+    function __construct(DateTimeImmutable $start, DateTimeImmutable $stop, string $description, bool $fullday=false)
+    {
+        $this->_start = $start;
+        $this->_stop = $stop;
+        $this->_description = $description;
+        $this->_fullday = $fullday;
+    }
+
+    public function getDescription(): string
+    {
+        if ($this->_fullday) {
+            return $this->_description;
+        }else {
+            return $this->_description . $this->_start->format(" (H:i)");
         }
-        return $res;
-    } else {
-        return FALSE;
     }
 
+    public function getDateStr(): string
+    {
+        return $this->_start->format('l j M');
+    }
+
+    public function getHourStr(): string
+    {
+        return $this->_start->format('H:i');
+    }
+
+    public function getStart(): DateTimeImmutable
+    {
+        return $this->_start;
+    }
 }
 
-
-/**
- * @return Google_Client
- */
-function setup_google_client()
+function parse_ical_datetime(string $value)
 {
-    $client = new Google_Client();
-    $client->setApplicationName("Fridge Calendar");
-    $client->setAccessType('offline');
-    $client->setClientId(GOOGLE_CLIENT_ID);
-    $client->setClientSecret(GOOGLE_CLIENT_SECRET);
-    $client->setRedirectUri(GOOGLE_REDIRECT_URI);
-    $client->addScope("https://www.googleapis.com/auth/calendar.readonly");
-    $client->setApprovalPrompt('force');
-
-    return $client;
+    if ($value[strlen($value) - 1] == 'Z') {
+        return DateTimeImmutable::createFromFormat('!Ymd\THis\Z', $value);
+    } else {
+        return DateTimeImmutable::createFromFormat('!Ymd\THis', $value);
+    }
 }
 
-
-/**
- * @param $google_client
- * @param int $nb_days
- * @return array
- */
-function getUpcommingEvents($google_client,$nb_days=1)
+function parse_ical_date(string $value)
 {
-    $res = array();
-    $service = new Google_Service_Calendar($google_client);
-    $calendarList = $service->calendarList->listCalendarList();
-    $dt_tz = new DateTimeZone (CALENDAR_TIMEZONE);
-    $dt_list_start = new DateTime('now', $dt_tz);
-    $dt_list_stop = new DateTime('now', $dt_tz);
-    $dt_list_stop->add(new DateInterval('P'.$nb_days.'D'));
+    return DateTimeImmutable::createFromFormat('!Ymd', $value);
+}
+function fetchUpcomingEvents(string $icsUrl, int $days = FETCH_DAYS): array
+{
+    $now = new DateTimeImmutable();
+    $last = (new DateTimeImmutable())->modify("+$days day");
+    $events = [];
 
-    while (true) {
-        /** @var Google_Service_Calendar_Calendar $calendarListEntry */
-        foreach ($calendarList->getItems() as $calendarListEntry) {
-            $calendar_id = $calendarListEntry->getId();
-            $optParam = array("orderBy" => "startTime",
-                'singleEvents' => true,
-                'timeMin' => $dt_list_start->format(DateTime::ATOM),
-                'timeMax' => $dt_list_stop->format(DateTime::ATOM),
-                'timeZone' => CALENDAR_TIMEZONE
-            );
-            // get event that occur in the next 7 days
-            $events = $service->events->listEvents($calendar_id, $optParam);
-            /** @var Google_Service_Calendar_Event $event */
-            foreach ($events->getItems() as $event) {
-                $summary = $event->getSummary();
-                $description = utf8_decode($summary);
-                if ($description==''){
-                    $description = '(Sans Titre)';
+    $data = @file_get_contents($icsUrl);
+    if ($data === false || trim($data) === '') {
+        return [];
+    }
+    //Split data into lines and unfold long lignes
+    $ics = str_replace(["\r\n", "\r"], "\n", $data);
+    $raw_lines = explode("\n", $ics);
+    $lines = [];
+    foreach ($raw_lines as $line) {
+        if ($line == '') {
+            continue;
+        }
+        if (($line[0] == ' ' || $line[0] == "\t") && $lines != []) {
+            $lines[count($lines) - 1] .= substr($line, 1);
+        } else {
+            $lines[] = $line;
+        }
+    }
+
+    $current = null;
+    //extract events
+    foreach ($lines as $line) {
+        if (str_starts_with($line, 'BEGIN:VEVENT')) {
+            $current = [];
+        } elseif (str_starts_with($line, 'END:VEVENT')) {
+            if ($current !== null) {
+                if (!key_exists('stop', $current)) {
+                    $current['stop'] = $current['start'];
                 }
-                /** @var Google_Service_Calendar_EventDateTime $start */
-                $start = $event->getStart();
-                if($start->getDate() != "") {
-                    // handle full day events
-                    /** @var Google_Service_Calendar_EventDateTime $end */
-                    $end = $event->getEnd();
-                    $dt_end = new DateTime($end->getDate());
-                    $dt_start = new DateTime($start->getDate());
-                    $dt_today = new DateTime();
-                    if ($dt_start < $dt_today){
-                        $dt_start = $dt_today;
-                    }
-
-                    while($dt_start < $dt_end) {
-                        $res[] = array('when'=> $dt_start->getTimestamp(), 'what'=>$description);
-                        $dt_start->add(new DateInterval('P1D'));
-                    }
-                } else {
-                    $tz = $start->getTimeZone();
-                    $date_time = new DateTime($start->getDateTime());
-                    if ($tz != '')
-                        $date_time->setTimezone( new DateTimeZone($tz));
-                    $description .= $date_time->format(" (H:i)");
-                    $res[] = array('when'=> $date_time->getTimestamp(), 'what'=>$description);
+                if ($current['stop'] > $now && $current['start'] < $last) {
+                    $events[] = new Event($current['start'], $current['stop'], $current['descr'],$current['full'] );
                 }
             }
-        }
-
-        $pageToken = $calendarList->getNextPageToken();
-        if($pageToken) {
-            $optParams = array('pageToken' => $pageToken);
-            $calendarList = $service->calendarList->listCalendarList($optParams);
-        } else {
-            break;
+            $current = null;
+        } elseif ($current !== null && str_contains($line, ':')) {
+            [$left, $value] = explode(':', $line, 2);
+            $parts = explode(';', $left);
+            if (str_starts_with($left, 'DTSTART')) {
+                if (sizeof($parts) >= 2 && $parts[1] == 'VALUE=DATE') {
+                    $t = parse_ical_date($value);
+                    $current['full'] = true;
+                } else {
+                    $t = parse_ical_datetime($value);
+                    $current['full'] = false;
+                }
+                $current['start'] = $t;
+            } elseif (str_starts_with($left, 'DTEND')) {
+                if (sizeof($parts) >= 2 && $parts[1] == 'VALUE=DATE') {
+                    $t = parse_ical_date($value);
+                    $t = $t->modify('+23 hours 59 minutes 59 seconds');
+                } else {
+                    $t = parse_ical_datetime($value);
+                }
+                $current['stop'] = $t;
+            } elseif (str_starts_with($left, 'SUMMARY')) {
+                $current['descr'] = $value;
+            }
         }
     }
+    usort($events, fn(Event $a, Event $b): int => $a->getStart() <=> $b->getStart());
+    return $events;
+}
 
-    function sortByOrder($a, $b) {
-        return $a['when'] - $b['when'];
+
+function getEventsFromSerial($serial)
+{
+    $url = getCalendarUrl($serial);
+    if ($url === null) {
+        return false;
+    } else {
+        return fetchUpcomingEvents($url);
     }
-    usort($res, 'sortByOrder');
-    return $res;
 }
