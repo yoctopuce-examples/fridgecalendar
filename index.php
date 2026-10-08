@@ -1,5 +1,4 @@
 <?php
-declare(strict_types=1);
 
 require_once __DIR__ . '/common.php';
 
@@ -154,7 +153,7 @@ $store = loadCalendarStore();
     <?php else: ?>
         <ul>
             <?php foreach ($preview['events'] as $event): ?>
-                <li><?= $event->getDescription(); ?></li>
+                <li><?= $event->getDateStr() ." ". $event->getDescription(); ?></li>
             <?php endforeach; ?>
         </ul>
     <?php endif; ?>

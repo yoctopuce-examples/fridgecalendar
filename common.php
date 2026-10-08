@@ -1,23 +1,10 @@
 <?php
-declare(strict_types=1);
-/**
- *  CONSTANTS TO BE PATCHED WITH USER DATA
- */
-define('CALENDAR_TIMEZONE', "Europe/Zurich");
-define('TODAY_STR', 'Aujourd\'hui');
-setlocale(LC_TIME, 'fr_FR.utf8', 'fra');
-
 const DATA_DIR = __DIR__ . '/data';
 const CALENDARS_FILE = DATA_DIR . '/calendars.json';
-const DISPLAY_LOCALE = 'fr_FR';
-const DEFAULT_TZ = 'Europe/Zurich';
 const FETCH_DAYS = 14;
+const TODAY_STR = 'Today';
 
 
-date_default_timezone_set(DEFAULT_TZ);
-// --- Stockage JSON : une URL iCal par numéro de série d'écran ---------------
-
-/** @return array<string, string> tableau serial => url iCal */
 function loadCalendarStore(): array
 {
     if (!is_file(CALENDARS_FILE)) {
