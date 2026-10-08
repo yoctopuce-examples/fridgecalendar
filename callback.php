@@ -42,10 +42,8 @@ function OutputMaxiDisplay($display, $allevents)
     $w = $display->get_displayWidth();
 
     $type = $display->get_displayType();
-    $display->set_autoInvertDelay(00);
     if ($type == YDisplay::DISPLAYTYPE_MONO) {
-        //$display->set_autoInvertDelay(3600);
-        $layer0->selectFont("Small.yfm");
+        $display->set_autoInvertDelay(3600);
         $layer0->selectGrayPen(255);
     } else {
         $layer0->selectGrayPen(0);
@@ -158,6 +156,9 @@ try {
     print($ex);
     file_put_contents("debug.txt", "!!!!!Exception {$ex->getMessage()} \n", FILE_APPEND);
 }
+
+$callback_url = $_SERVER['REQUEST_SCHEME'] . '://' . $_SERVER['SERVER_NAME'] . $_SERVER['SCRIPT_NAME'];
+
 ?>
 <!DOCTYPE html>
 <html>
@@ -165,16 +166,38 @@ try {
 <head>
     <meta charset="utf-8">
     <title>Yoctopuce HTTP Callback</title>
+    <style>
+        code {
+            display: block;
+            padding: 16px;
+            border: 1px solid black;
+        }
+    </style>
 </head>
+
 <body>
-<b>This example need to be run by a VirtualHub or a YoctoHub.</b><br/>
+<h1>This example need to be run by a VirtualHub or a YoctoHub.</h1>
+<p>The following parameters need to be copied to the YoctoHub or VirtualHub</p>
+
+<code id="cbset">
+    {
+    "callbackUrl": "<?php print($callback_url); ?>",
+    "callbackMethod": "POST",
+    "callbackEncoding": "YOCTO_API"
+    }
+</code>
+<div>
+    <button onclick="copysetting()">Copy settings</button>
+    <button onclick="downsettings()">Download settings</button>
+</div>
+<p>Alternatively you can configure the YoctoHub/VirtualHub manually:</p>
 <ol>
     <li>Connect to the web interface of the VirtualHub or YoctoHub that will run this script.</li>
     <li>Click on the <em>configure</em> button of the VirtualHub or YoctoHub.</li>
     <li>Click on the <em>edit</em> button of "Callback URL" settings.</li>
     <li>Set the <em>type of Callback</em> to <b>Yocto-API Callback</b>.</li>
     <li>Set the <em>callback URL</em> to
-        http://<b><?php print($_SERVER['SERVER_NAME'] . ':' . $_SERVER['SERVER_PORT'] . $_SERVER['SCRIPT_NAME']); ?></b>.
+        <b><?php print($callback_url); ?></b>.
     </li>
     <li>Click on the <em>test</em> button.</li>
 </ol>

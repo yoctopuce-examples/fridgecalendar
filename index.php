@@ -1,9 +1,14 @@
 <?php
 declare(strict_types=1);
+
 require_once __DIR__ . '/common.php';
 
 $errors = [];
 $preview = null;
+
+$callback_url =  $_SERVER['REQUEST_SCHEME'] . '://'.$_SERVER['SERVER_NAME'] .  $_SERVER['SCRIPT_NAME'];
+$callback_url = str_replace('index.php', 'callback.php', $callback_url);
+
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
@@ -22,8 +27,8 @@ if (isset($_GET['preview'])) {
     $events = getEventsFromSerial($serial);
     if ($events === null) {
         $errors[] = "Unknown $serial display.";
-    }else{
-        $preview = ['serial'=>$serial, 'events'=>$events];
+    } else {
+        $preview = ['serial' => $serial, 'events' => $events];
     }
 }
 
@@ -58,6 +63,10 @@ $store = loadCalendarStore();
             margin-top: .8rem;
         }
 
+        div {
+            margin-top: .8rem;
+        }
+
         input[type=text] {
             width: 100%;
             box-sizing: border-box;
@@ -67,17 +76,35 @@ $store = loadCalendarStore();
             color: #b00;
         }
 
-        .ok {
-            color: #080;
-        }
-
         code {
-            word-break: break-all;
+            display: block;
+            padding: 16px;
+            border: 1px solid black;
         }
     </style>
+
+    <script>
+
+        function copysetting() {
+            navigator.clipboard.writeText(document.getElementById("cbset").innerHTML);
+        }
+
+
+        function downsettings() {
+            let blob = new Blob([document.getElementById("cbset").innerHTML], {type: 'application/json'});
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement('a');
+            a.href = url;
+            a.download = "callback_settings.json";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
 </head>
 <body>
-<h1>Fridge Calendar / configuration</h1>
+<h1>Fridge Calendar</h1>
 
 <?php foreach ($errors as $msg): ?>
     <p class="error"><?= $msg ?></p>
@@ -92,9 +119,11 @@ $store = loadCalendarStore();
     <label>Google calendar secret URL (https://?/basic.ics)
         <input type="text" name="ics_url" placeholder="https://calendar.google.com/calendar/ical/?/private-?/basic.ics" required>
     </label>
-    <button type="submit">Regitser</button>
+    <div>
+        <button type="submit">Register</button>
+        <button type="reset">Cancel</button>
+    </div>
 </form>
-
 <?php if ($store !== []): ?>
     <h2>Registered screens</h2>
     <table>
@@ -106,11 +135,11 @@ $store = loadCalendarStore();
             <tr>
                 <td><?= $serial ?></td>
                 <td>
-                    <a href="?preview=<?= urlencode($serial) ?>">preview</a>
+                    <button onclick="document.location='?preview=<?= urlencode($serial) ?>'">Preview</button>
                     <form method="post" style="display:inline">
                         <input type="hidden" name="action" value="delete">
                         <input type="hidden" name="serial" value="<?= $serial ?>">
-                        <button type="submit">remove</button>
+                        <button type="submit">Remove</button>
                     </form>
                 </td>
             </tr>
@@ -131,5 +160,31 @@ $store = loadCalendarStore();
     <?php endif; ?>
 <?php endif; ?>
 
+
+<h2>HTTP callback settings</h2>
+<p>The folowing parameters need to be copied to the YoctoHub or VirtualHub</p>
+
+<code id="cbset">
+    {
+    "callbackUrl": "<?php print($callback_url); ?>",
+    "callbackMethod": "POST",
+    "callbackEncoding": "YOCTO_API"
+    }
+</code>
+<div>
+    <button onclick="copysetting()">Copy settings</button>
+    <button onclick="downsettings()">Download settings</button>
+</div>
+<p>Alternatively you can configure the YoctoHub/VirtualHub manually:</p>
+<ol>
+    <li>Connect to the web interface of the VirtualHub or YoctoHub that will run this script.</li>
+    <li>Click on the <em>configure</em> button of the VirtualHub or YoctoHub.</li>
+    <li>Click on the <em>edit</em> button of "Callback URL" settings.</li>
+    <li>Set the <em>type of Callback</em> to <b>Yocto-API Callback</b>.</li>
+    <li>Set the <em>callback URL</em> to
+        <b><?php print($callback_url); ?></b>.
+    </li>
+    <li>Click on the <em>test</em> button.</li>
+</ol>
 </body>
 </html>
