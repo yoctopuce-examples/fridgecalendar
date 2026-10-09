@@ -83,10 +83,10 @@ class Event
     }
 }
 
-function parse_ical_datetime(string $value)
+function parse_ical_datetime(string $value,  ?DateTimeZone $timezone =  new DateTimeZone('UTC'))
 {
     if ($value[strlen($value) - 1] == 'Z') {
-        return DateTimeImmutable::createFromFormat('!Ymd\THis\Z', $value);
+        return DateTimeImmutable::createFromFormat('!Ymd\THis\Z', $value, $timezone);
     } else {
         return DateTimeImmutable::createFromFormat('!Ymd\THis', $value);
     }
@@ -122,9 +122,13 @@ function fetchUpcomingEvents(string $icsUrl, int $days = FETCH_DAYS): array
     }
 
     $current = null;
+    $calendar_timezone = null;
     //extract events
     foreach ($lines as $line) {
-        if (str_starts_with($line, 'BEGIN:VEVENT')) {
+        if (str_starts_with($line, 'X-WR-TIMEZONE')) {
+            [$left, $value] = explode(':', $line, 2);
+            $calendar_timezone = new DateTimeZone(trim($value));
+        }elseif (str_starts_with($line, 'BEGIN:VEVENT')) {
             $current = [];
         } elseif (str_starts_with($line, 'END:VEVENT')) {
             if ($current !== null) {
@@ -147,7 +151,7 @@ function fetchUpcomingEvents(string $icsUrl, int $days = FETCH_DAYS): array
                     $t = parse_ical_datetime($value);
                     $current['full'] = false;
                 }
-                $current['start'] = $t;
+                $current['start'] = $t->setTimezone($calendar_timezone);
             } elseif (str_starts_with($left, 'DTEND')) {
                 if (sizeof($parts) >= 2 && $parts[1] == 'VALUE=DATE') {
                     $t = parse_ical_date($value);
@@ -155,7 +159,7 @@ function fetchUpcomingEvents(string $icsUrl, int $days = FETCH_DAYS): array
                 } else {
                     $t = parse_ical_datetime($value);
                 }
-                $current['stop'] = $t;
+                $current['stop'] = $t->setTimezone($calendar_timezone);
             } elseif (str_starts_with($left, 'SUMMARY')) {
                 $current['descr'] = $value;
             }
