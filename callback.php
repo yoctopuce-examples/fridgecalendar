@@ -52,7 +52,7 @@ function OutputMaxiDisplay($display, $allevents)
     if ($h > 64) {
         $layer0->selectFont("Medium.yfm");
         $baseline_height = 16;
-        $nblines = 8;
+        $nblines = 10;
     } else {
         $layer0->selectFont("Small.yfm");
         $baseline_height = 8;
@@ -123,6 +123,7 @@ try {
             mkdir("logs");
         }
         cblog($hubserial, "New connection the " . date('l jS \of F Y h:i:s A', $now));
+        $ynet->set_callbackSchedule('every 60s');
 
         // create an array with all connected display
         $display = YDisplay::FirstDisplay();
@@ -131,7 +132,6 @@ try {
             // get the display serial number
             $module = $display->module();
             $serial = $module->get_serialNumber();
-
             // darken screen for 21h to 6h
             $curhour = date("H");
             if ($curhour > 6 && $curhour < 21) {

@@ -2,6 +2,6 @@
 
 This application let you display on any Yoctopuce display the upcoming event form à Google calendar.
 
-See full article: https://www.yoctopuce.com/
+See full article: https://www.yoctopuce.com/EN/article/google-calendar-on-your-yocto-display-epaper-c
 
 **Note:** In 2026 we updated this project to work with iCal secret URL. If you want to know more about  the original project that was using OAuth2 you can read this article: https://www.yoctopuce.com/EN/article/google-calendar-on-your-yocto-maxidisplay
